@@ -3,6 +3,7 @@ from .models import Meters, Records
 from .forms import MetersForm, CSVUploadForm
 from django.shortcuts import get_object_or_404
 from datetime import date
+import csv
 
 
 def home(request):
@@ -15,38 +16,31 @@ def meter_page(request, meter_id):
     if request.method == "POST":
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            """ First of all - delete all records for meter"""
-            Records.objects.filter(meter_id=meter_id).delete()
-
             """ Reading CSV file """
-            f = request.FILES['file']
-            data_list = []
-            previous_reading = 0
+            data = csv.DictReader(request.FILES['file'].read().decode('utf-8').splitlines())
+            start_date = date(2200,1,1)
+            for row in data:
+                date_record = row['DATE'].split('-')  # [0 - year, 1 - month, 2 - day]
+                dt = date(int(date_record[0]), int(date_record[1]), int(date_record[2]))
 
-            for chunk in f.chunks():
-                chunk = chunk.decode("utf-8").split('\r\n')
-                for line in reversed(chunk):
-                    reading = line.split(',')  # [0 - date, 1 - int]
-                    date_record = reading[0].split('-')  # [0 - year, 1 - month, 2 - day]
-                    try:
-                        dt = date(int(date_record[0]), int(date_record[1]), int(date_record[2]))
-                    except:
-                        continue
+                try:
+                    db_record = Records.objects.get(meter__id=meter_id, date=dt)
+                    db_record.record = float(row['VALUE'])
+                    db_record.save()
+                except:
+                    db_record = Records(
+                        meter = meter,
+                        date  = dt,
+                        record = float(row['VALUE'])
+                    )
+                    db_record.save()
+                if dt < start_date:
+                    start_date = dt
 
-                    if previous_reading == 0:
-                        previous_reading = float(reading[1])
-
-                    new_record = Records()
-                    new_record.meter = meter
-                    new_record.date = dt
-                    new_record.record = float(reading[1])
-                    new_record.consumption = float(reading[1]) - previous_reading
-                    new_record.save()
-
-                    previous_reading = float(reading[1])
+            meter.consumptions_recalculation(start_date) #perform recalculation of consumptions
 
     records = Records.objects.filter(meter__id=meter_id)
-    records_list = [] # list of lists with consumption and date - for chart
+    records_list = []  # list of lists with consumption and date - for chart
     for i in records:
         records_list.append([i.date.isoformat(), i.consumption])
 
@@ -55,7 +49,7 @@ def meter_page(request, meter_id):
         last_reading_date = last_reading.date.isoformat()
         last_reading_record = last_reading.record
     else:
-        last_reading_date,  last_reading_record= None, None
+        last_reading_date, last_reading_record = None, None
 
     context = {'form': form,
                'object': meter,
