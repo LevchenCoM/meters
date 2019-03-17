@@ -1,6 +1,7 @@
 from django.test import TestCase
 from meters.models import Meters, Records, ResourceType
 from datetime import date
+import pandas as pd
 
 
 class ResourceTypeTest(TestCase):
@@ -53,6 +54,8 @@ class RecordsTest(TestCase):
                                                         date=date(2019, 1, 3),
                                                         record=25)
 
+
+
     def test_record_creation(self):
         """ Checking objects creation"""
         self.assertTrue(isinstance(self.test_first_record, Records))
@@ -92,6 +95,31 @@ class RecordsTest(TestCase):
         self.assertEqual(test_first_record.consumption, 0)
         self.assertEqual(test_second_record.consumption, 11.0)
         self.assertEqual(test_third_record.consumption, 21.0)
+
+    def test_readings_import(self):
+        """ Checking readings import functional """
+
+        """ Create new DateFrame with new records"""
+        data_dict = {'DATE': [date(2019, 1, 4),
+                              date(2019, 1, 5),
+                              date(2019, 1, 6)],
+                    'VALUE': [35, 45, 60]}
+        records_table = pd.DataFrame(data_dict)
+
+        self.test_meter.import_readings(records_table)
+
+        queryset = Records.objects.filter(date__in=data_dict['DATE']).order_by('date')
+
+        self.assertEqual(list(queryset.values_list('date', flat=True)), data_dict['DATE'])
+        self.assertEqual(list(queryset.values_list('record', flat=True)), data_dict['VALUE'])
+
+        self.assertEqual(list(queryset.values_list('consumption', flat=True)), [10.0, 10.0, 15.0])
+
+
+
+
+
+
 
 
 

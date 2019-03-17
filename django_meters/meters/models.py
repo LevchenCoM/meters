@@ -1,5 +1,6 @@
 from django.db import models
 from datetime import date
+import pandas as pd
 
 class ResourceType(models.Model):
     name = models.CharField(max_length=32, blank=False, null=False)
@@ -34,17 +35,38 @@ class Meters(models.Model):
         records_list = Records.objects.filter(meter__id=self.id,
                                               date__gte=start_date).order_by('date')
         try:
-            last_record = Records.objects.filter(date__lt=start_date.date).order_by('date').last().record
+            last_record = Records.objects.filter(date__lt=start_date).order_by('date').last().record
         except:
             last_record = 0
 
+        obj_list = []
         for record in records_list:
             if last_record == 0:
                 last_record = record.record
             record.consumption = record.record - last_record
-            record.save()
             last_record = record.record
+            obj_list.append(record)
 
+        Records.objects.filter(date__in=records_list.values_list('date', flat=True)).delete()  # delete previous records
+        Records.objects.bulk_create(obj_list)  # create multiple object in one call to DB
+
+    def import_readings(self, readings_table):  #records_table - pandas DataFrame
+        readings_table = readings_table.fillna(0)   # replace NaN with 0
+        obj_list = []
+
+        for index, row in readings_table.iterrows():
+            obj_list.append(Records(meter=self,
+                                    date=row.DATE,
+                                    record=row.VALUE,
+                                    consumption=0))
+
+        Records.objects.filter(date__in=readings_table.DATE.tolist()).delete() # delete previous records
+        Records.objects.bulk_create(obj_list)                                  # create multiple object in one call to DB
+        self.consumptions_recalculation(readings_table.DATE.min())
+
+
+        # readings_table = readings_table.sort_values(by=['DATE'], ascending=True) # Sorting values by date (ascending)
+        # readings_table['CONSUMPTION'] = readings_table['VALUE'].diff()           # Performing of calculation consumptions
 
     class Meta:
         verbose_name = "Meter"

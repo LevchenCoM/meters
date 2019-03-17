@@ -3,6 +3,8 @@ from .models import Meters, Records
 from .forms import MetersForm, CSVUploadForm
 from django.shortcuts import get_object_or_404
 from datetime import date
+import numpy as np
+import pandas as pd
 import csv
 
 
@@ -17,27 +19,36 @@ def meter_page(request, meter_id):
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
             """ Reading CSV file """
-            data = csv.DictReader(request.FILES['file'].read().decode('utf-8').splitlines())
-            start_date = date(2200,1,1)
-            for row in data:
-                date_record = row['DATE'].split('-')  # [0 - year, 1 - month, 2 - day]
-                dt = date(int(date_record[0]), int(date_record[1]), int(date_record[2]))
+            readings_table = pd.read_csv(request.FILES['file'],
+                                         sep=",",
+                                         encoding='utf-8',
+                                         parse_dates=['DATE'])
+            meter.import_readings(readings_table)
 
-                try:
-                    db_record = Records.objects.get(meter__id=meter_id, date=dt)
-                    db_record.record = float(row['VALUE'])
-                    db_record.save()
-                except:
-                    db_record = Records(
-                        meter = meter,
-                        date  = dt,
-                        record = float(row['VALUE'])
-                    )
-                    db_record.save()
-                if dt < start_date:
-                    start_date = dt
 
-            meter.consumptions_recalculation(start_date) #perform recalculation of consumptions
+            # data = csv.DictReader(request.FILES['file'].read().decode('utf-8').splitlines())
+            # records_list = np.array()
+            # # obj_list = []  # list of obj to bulk_create in the end of function
+            # # dates_list = []  # list of dates to filter and delete previous records before bulk_create
+            #
+            # for row in data:
+            #     date_record = row['DATE'].split('-')  # [0 - year, 1 - month, 2 - day]
+            #     dt = date(int(date_record[0]), int(date_record[1]), int(date_record[2]))
+            #     records_list.append([dt, float(row['VALUE']), 0])
+            #
+            #     # dates_list.append(dt)
+            #     # db_record = Records(
+            #     #     meter=meter,
+            #     #     date=dt,
+            #     #     record=float(row['VALUE'])
+            #     # )
+            #     # obj_list.append(db_record)
+            #
+            #
+            # # Records.objects.filter(date__in=dates_list).delete() # delete previous records
+            # # Records.objects.bulk_create(obj_list)                # create multiple object in one call to DB
+            # # meter.consumptions_recalculation(min(dates_list))    # perform recalculation of consumptions
+
 
     records = Records.objects.filter(meter__id=meter_id)
     records_list = []  # list of lists with consumption and date - for chart

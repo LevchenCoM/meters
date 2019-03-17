@@ -7,8 +7,8 @@ verify_ssl = true
 
 [packages]
 django = "*"
-django-widjet-tweaks = "*"
 django-widget-tweaks = "*"
+pandas = "*"
 
 [requires]
 python_version = "3.6"
